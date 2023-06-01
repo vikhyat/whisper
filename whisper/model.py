@@ -87,25 +87,22 @@ class MultiHeadAttention(nn.Module):
             k = kv_cache[self.key]
             v = kv_cache[self.value]
 
-        wv, qk = self.qkv_attention(q, k, v, mask)
-        return self.out(wv), qk
+        wv = self.qkv_attention(q, k, v, mask)
+        return self.out(wv)
 
     def qkv_attention(
         self, q: Tensor, k: Tensor, v: Tensor, mask: Optional[Tensor] = None
     ):
         n_batch, n_ctx, n_state = q.shape
-        scale = (n_state // self.n_head) ** -0.25
-        q = q.view(*q.shape[:2], self.n_head, -1).permute(0, 2, 1, 3) * scale
-        k = k.view(*k.shape[:2], self.n_head, -1).permute(0, 2, 3, 1) * scale
+        scale = (n_state // self.n_head) ** -0.5
+
+        q = q.view(*q.shape[:2], self.n_head, -1).permute(0, 2, 1, 3)
+        k = k.view(*k.shape[:2], self.n_head, -1).permute(0, 2, 1, 3)
         v = v.view(*v.shape[:2], self.n_head, -1).permute(0, 2, 1, 3)
 
-        qk = q @ k
-        if mask is not None:
-            qk = qk + mask[:n_ctx, :n_ctx]
-        qk = qk.float()
-
-        w = F.softmax(qk, dim=-1).to(q.dtype)
-        return (w @ v).permute(0, 2, 1, 3).flatten(start_dim=2), qk.detach()
+        attn_mask = mask[:n_ctx, :n_ctx] if mask is not None else mask
+        sdpa = F.scaled_dot_product_attention(q, k, v, attn_mask, scale=scale)
+        return sdpa.permute(0, 2, 1, 3).flatten(start_dim=2)
 
 
 class ResidualAttentionBlock(nn.Module):
@@ -190,7 +187,7 @@ class TextDecoder(nn.Module):
         )
         self.ln = LayerNorm(n_state)
 
-        mask = torch.empty(n_ctx, n_ctx).fill_(-np.inf).triu_(1)
+        mask = torch.empty(n_ctx, n_ctx, dtype=torch.bool).fill_(True).tril_()
         self.register_buffer("mask", mask, persistent=False)
 
     def forward(self, x: Tensor, xa: Tensor, kv_cache: Optional[dict] = None):
