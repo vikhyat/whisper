@@ -106,16 +106,16 @@ def transcribe(
     A dictionary containing the resulting text ("text") and segment-level details ("segments"), and
     the spoken language ("language"), which is detected when `decode_options["language"]` is None.
     """
-    dtype = torch.float16 if decode_options.get("fp16", True) else torch.float32
+    dtype = torch.bfloat16 if decode_options.get("bf16", True) else torch.float32
     if model.device == torch.device("cpu"):
         if torch.cuda.is_available():
             warnings.warn("Performing inference on CPU when CUDA is available")
-        if dtype == torch.float16:
-            warnings.warn("FP16 is not supported on CPU; using FP32 instead")
+        if dtype == torch.bfloat16:
+            warnings.warn("BF16 is not supported on CPU; using FP32 instead")
             dtype = torch.float32
 
     if dtype == torch.float32:
-        decode_options["fp16"] = False
+        decode_options["bf16"] = False
 
     # Pad 30-seconds of silence to the input audio, for slicing
     mel = log_mel_spectrogram(audio, padding=N_SAMPLES)
@@ -396,7 +396,7 @@ def cli():
     parser.add_argument("--suppress_tokens", type=str, default="-1", help="comma-separated list of token ids to suppress during sampling; '-1' will suppress most special characters except common punctuations")
     parser.add_argument("--initial_prompt", type=str, default=None, help="optional text to provide as a prompt for the first window.")
     parser.add_argument("--condition_on_previous_text", type=str2bool, default=True, help="if True, provide the previous output of the model as a prompt for the next window; disabling may make the text inconsistent across windows, but the model becomes less prone to getting stuck in a failure loop")
-    parser.add_argument("--fp16", type=str2bool, default=True, help="whether to perform inference in fp16; True by default")
+    parser.add_argument("--bf16", type=str2bool, default=True, help="whether to perform inference in bf16; True by default")
 
     parser.add_argument("--temperature_increment_on_fallback", type=optional_float, default=0.2, help="temperature to increase when falling back when the decoding fails to meet either of the thresholds below")
     parser.add_argument("--compression_ratio_threshold", type=optional_float, default=2.4, help="if the gzip compression ratio is higher than this value, treat the decoding as failed")
