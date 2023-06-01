@@ -109,7 +109,7 @@ class DecodingOptions:
     max_initial_timestamp: Optional[float] = 1.0
 
     # implementation details
-    fp16: bool = True  # use fp16 for most of the calculation
+    bf16: bool = True  # use bf16 for most of the calculation
 
 
 @dataclass(frozen=True)
@@ -632,8 +632,8 @@ class DecodingTask:
         return tuple(sorted(set(suppress_tokens)))
 
     def _get_audio_features(self, mel: Tensor):
-        if self.options.fp16:
-            mel = mel.half()
+        if self.options.bf16:
+            mel = mel.to(torch.bfloat16)
 
         if mel.shape[-2:] == (
             self.model.dims.n_audio_ctx,
@@ -645,7 +645,7 @@ class DecodingTask:
             audio_features = self.model.encoder(mel)
 
         if audio_features.dtype != (
-            torch.float16 if self.options.fp16 else torch.float32
+            torch.bfloat16 if self.options.bf16 else torch.float32
         ):
             return TypeError(
                 f"audio_features has an incorrect dtype: {audio_features.dtype}"
